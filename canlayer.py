@@ -5,7 +5,7 @@ import numpy as np
 
 
 dim_geom=6 # Number of dimensions used for the geometric pose
-
+affine_filters=2 # filters to drive affine transformation
 def squash_scale(vectors, axis=-1):
     """
     The non-linear activation used in Capsule. It drives the length of a large vector to near 1 and small vector to 0
@@ -121,12 +121,11 @@ class CAN(layers.Layer):
         # squash the weighted sum of attributes
         weighted_attrs = K.batch_dot(c,inputs_hat[:,:,:,dim_geom+1:], [2, 2])
         scale = squash_scale(weighted_attrs)
-        squashed_attrs  = scale*weighted_attrs
 
-        # use the magnitude of the attributes for probability
+        # use the magnitude of the squashedweighted sum of attributes for probability
         probability = scale
 
-        guess = layers.concatenate([probability,mean_geom,squashed_attrs])
+        guess = layers.concatenate([probability,mean_geom,weighted_attrs])
         return guess
 
     def _agreement(self, outputs, inputs_hat):
@@ -212,8 +211,8 @@ def PrimaryCap(inputs,num_capsule, dim_capsule_attr, kernel_size, strides, paddi
         :param x: attributes from input Conv2D
         :return:
         '''
-        _,rows,cols,num_capsule,dim_attr = x.shape
-        dim_capsule=dim_attr+dim_geom+1
+        _,rows,cols,num_capsule,dim_x = x.shape
+        dim_capsule=dim_x-2+dim_geom+1
         # create the probability part
         s_squared_norm = K.sum(K.square(x), -1, keepdims=True)
         probability = s_squared_norm / (1 + s_squared_norm) / K.sqrt(s_squared_norm + K.epsilon())
@@ -229,24 +228,29 @@ def PrimaryCap(inputs,num_capsule, dim_capsule_attr, kernel_size, strides, paddi
         xcoordtiled = tf.tile(xcoord, [bsz,1,1,num_capsule, 1])
         ycoordtiled = tf.tile(ycoord, [bsz,1,1,num_capsule, 1])
 
-        # create the angles + scale part
-        # [[cos(a)*scalex,-sin(a)*scaley],[sin(a)*scalex,cos(a)*scaley]]
-        a1=tf.ones_like(probability)
-        angles=tf.tile(a1,[1,1,1,1,4])
+        # create the rotation + scale part (assume scale of 1)
+        n=int(affine_filters/2)
+        cosa0,sina0=tf.reduce_sum(x[...,:n],axis=-1,keep_dims=True),tf.reduce_sum(x[...,n:n*2],axis=-1,keep_dims=True)
+        r = tf.sqrt(tf.add(tf.square(cosa0),tf.square(sina0)))
+        r = r+K.epsilon()
+        cosa=cosa0/r
+        sina=sina0/r
+        affine=tf.concat([cosa,sina,-sina,cosa],axis=-1)
 
         # now assemble the capsule output
-        o1=tf.concat([probability,xcoordtiled, ycoordtiled,angles,x],axis=-1)
+        attrs=x[...,affine_filters:]
+        o1=tf.concat([probability,xcoordtiled, ycoordtiled,affine,attrs],axis=-1)
         o2=tf.reshape(o1,[bsz,rows*cols,num_capsule,dim_capsule],name="primary_cap_build_pose_output_reshaping")
         out=tf.transpose(o2,[0,2,1,3])
         #out=tf.Print(out,[out[0,0,0,:]],message="primary cap output",summarize=100)
         return out
 
 
-    output = layers.Conv2D(filters=num_capsule*dim_capsule_attr, kernel_size=kernel_size, strides=strides, padding=padding,
+    output = layers.Conv2D(filters=num_capsule*(dim_capsule_attr+affine_filters), kernel_size=kernel_size, strides=strides, padding=padding,
                            name='primarycap_conv2d')(inputs)
     _ , rows, cols, channels = output.shape
 
-    attroutputs = layers.Reshape(target_shape=[int(rows),int(cols),num_capsule,dim_capsule_attr], name='primarycap_attributes')(output)
+    attroutputs = layers.Reshape(target_shape=[int(rows),int(cols),num_capsule,dim_capsule_attr+affine_filters], name='primarycap_attributes')(output)
 
     outputs=layers.Lambda(build_geom_pose, name='primarycap')(attroutputs)
 
