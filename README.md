@@ -20,9 +20,9 @@ instead of having a separate transformation for every child capsule
 - capsules of the same type in the same layer share the part-to-whole weights
 
 **Differences with the paper:**
-- Capsule outputs are forced to include geometric pose information that we use for routing.
+- Capsule outputs are forced to include geometric pose information that we use for attention routing.
 - Capsule outputs are weighted by the distance between the child and parent capsule
-- Part-to-whole transformation weights are 
+- Part-to-whole transformation weights are associated with the parent capsule.
 - We train without the reconstruction regularizaton.
 
 **TODO**
@@ -35,8 +35,8 @@ instead of having a separate transformation for every child capsule
 ## Usage
 
 **Step 1.
-Install [Keras>=2.0.7](https://github.com/fchollet/keras) 
-with [TensorFlow>=1.2](https://github.com/tensorflow/tensorflow) backend.**
+Install [Keras>=2.0.9](https://github.com/fchollet/keras) 
+with [TensorFlow>=1.4](https://github.com/tensorflow/tensorflow) backend.**
 ```
 pip install tensorflow-gpu
 pip install keras
