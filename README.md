@@ -1,11 +1,11 @@
-# CapsNet-Keras
-[![License](https://img.shields.io/github/license/mashape/apistatus.svg?maxAge=2592000)](https://github.com/XifengGuo/CapsNet-Keras/blob/master/LICENSE)
+# Capsule Attention Network
 
-An implementation of a type of a Capsule Network. 
+An implementation of a variant of a Capsule Network with attention. 
 We use a form of attention to improve signal to noise levels and weight sharing to reduce parameter count.
 We force the capsule pose to contain a geometric pose and the attention mechanism uses that information
 to guide the 'routing by agreement' algorithm.
 The attention mechanism also gives priority to nearby objects as a means to improve the signal to noise ratios for pose estimation.
+The attention is and algorithm and is not learned, but the part-to-whole relationships are learned. 
 The capsule shares the part-to-whole transformation weights for all children 
 instead of having a separate transformation for every child capsule
 
