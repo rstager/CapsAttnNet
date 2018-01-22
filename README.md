@@ -54,9 +54,15 @@ First generate some data
 ```
 python gen_images.py
 ```
-Then train with default settings:
+Train with default settings using sample images include in the data/images.npz:
+
 ```
 python train.py
+```
+
+Or use this script to generate new data 
+```
+python gen_images.py
 ```
 
 ## Results
