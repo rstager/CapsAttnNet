@@ -18,7 +18,7 @@ def squash_scale(vectors, axis=-1):
     return scale
 
 
-class CANLayer(layers.Layer):
+class CAN(layers.Layer):
     """
     The capsule attention layer. Similar to a CapsuleLayer, but
     1) shares weights for multiple instances of each capsule type
@@ -38,7 +38,7 @@ class CANLayer(layers.Layer):
     def __init__(self, num_capsule, dim_capsule, num_instance=5,num_part=7, routings=3,
                  kernel_initializer='glorot_uniform',
                  **kwargs):
-        super(CANLayer, self).__init__(**kwargs)
+        super(CAN, self).__init__(**kwargs)
         self.num_capsule = num_capsule
         self.num_instance = num_instance
         self.num_part = num_part
@@ -150,8 +150,8 @@ class CANLayer(layers.Layer):
 
         # geom_agree=tf.Print(geom_agree, [outputs[0,0,:dim_geom+1]], message='agree guess ', summarize=5)
         # geom_agree=tf.Print(geom_agree, [inputs_hat[0,0,0,:dim_geom+1]], message='agree uhat ', summarize=5)
-        #geom_agree=tf.Print(geom_agree, [geom_agree[0,0,0]], message='geom_agree ', summarize=5)
-        #geom_agree=tf.Print(geom_agree, [attr_agree[0,0,0]], message='attr_agree ', summarize=5)
+        # geom_agree=tf.Print(geom_agree, [geom_agree[0,0,0]], message='geom_agree ', summarize=5)
+        # geom_agree=tf.Print(geom_agree, [attr_agree[0,0,0]], message='attr_agree ', summarize=5)
         # geom_agree=tf.Print(geom_agree, [tf.reduce_max(geom_agree),tf.reduce_min(geom_agree)], message='geom_agree max/min', summarize=5)
         # geom_agree=tf.Print(geom_agree, [tf.reduce_max(attr_agree),tf.reduce_min(attr_agree)], message='attr_agree max/min', summarize=5)
 
@@ -252,13 +252,13 @@ def PrimaryCap(inputs, dim_capsule, n_channels, kernel_size, strides, padding):
                            name='primarycap_conv2d')(inputs)
     _ , rows, cols, channels = output.shape
 
-    attroutputs = layers.Reshape(target_shape=[-1,int(rows),int(cols), n_channels,dim_attr], name='primarycap_cnn_reshape')(output)
+    attroutputs = layers.Reshape(target_shape=[-1,int(rows),int(cols), n_channels,dim_attr], name='primarycap_attributes')(output)
 
 
-    probability=layers.Lambda(squash_scale, name='primarycap_squash_scale')(attroutputs)
+    probability=layers.Lambda(squash_scale, name='primarycap_probability')(attroutputs)
 
     locs=AddLocationLayer(name='primarycap_add_loc')(attroutputs)
-    outputs= layers.concatenate([probability,locs,attroutputs],5,name='prob_loc_attr')
-    outputs = layers.Reshape(target_shape=[int(rows)*int(cols),n_channels,dim_capsule], name='primarycap_reshape')(outputs)
-    outputs = layers.Permute([2,1,3],name='primarycap_reordered')(outputs)
+    outputs= layers.concatenate([probability,locs,attroutputs],5)
+    outputs = layers.Reshape(target_shape=[int(rows)*int(cols),n_channels,dim_capsule])(outputs)
+    outputs = layers.Permute([2,1,3],name='primarycap_output')(outputs)
     return outputs

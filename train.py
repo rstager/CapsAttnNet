@@ -1,19 +1,14 @@
 """
-Keras implementation of CapsNet in Hinton's paper Dynamic Routing Between Capsules.
-The current version maybe only works for TensorFlow backend. Actually it will be straightforward to re-write to TF code.
-Adopting to other backends should be easy, but I have not tested this.
+Capsule Attention Network.. a variant of the implementation of CapsNet in Hinton's paper Dynamic Routing Between Capsules.
+
+Derived from work by Xifeng Guo, E-mail: `guoxifeng1990@163.com`, Github: `https://github.com/XifengGuo/CapsNet-Keras`
 
 Usage:
-       python capsulenet.py
-       python capsulenet.py --epochs 50
-       python capsulenet.py --epochs 50 --routings 3
+       python train.py
        ... ...
 
 Result:
-    Validation accuracy > 99.5% after 20 epochs. Converge to 99.66% after 50 epochs.
-    About 110 seconds per epoch on a single GTX1070 GPU card
 
-Author: Xifeng Guo, E-mail: `guoxifeng1990@163.com`, Github: `https://github.com/XifengGuo/CapsNet-Keras`
 """
 
 import numpy as np
@@ -21,9 +16,10 @@ import numpy as np
 import gen_images
 from keras.layers import Lambda
 
-from canlayer import PrimaryCap, CANLayer
+from canlayer import PrimaryCap, CAN
 from keras import layers, models, optimizers
 from keras import backend as K
+import tensorflow as tf
 
 
 K.set_image_data_format('channels_last')
@@ -46,17 +42,17 @@ def create_model(input_shape, n_class, n_instance, n_part, routings):
     conv1 = layers.Conv2D(filters=32, kernel_size=9, strides=1, padding='valid', activation='relu', name='conv1')(x)
 
     # Layer 2: Conv2D layer with `squash` activation, then reshape to [None, num_capsule, dim_capsule]
-    primarycaps = PrimaryCap(conv1, dim_capsule=4, n_channels=32, kernel_size=9, strides=2, padding='valid')
+    primarycaps = PrimaryCap(conv1, dim_capsule=5, n_channels=128, kernel_size=9, strides=1, padding='valid')
 
 
     # Layer 3: Capsule layer. Attention algorithm works here.
-    digitcaps = CANLayer(num_capsule=n_class, dim_capsule=16, routings=routings, num_instance=n_instance, num_part=n_part,
-                             name='digitcaps')(primarycaps)
+    digitcaps = CAN(num_capsule=n_class, dim_capsule=16, routings=routings, num_instance=n_instance, num_part=n_part,
+                    name='digitcaps')(primarycaps)
 
 
     # Layer 4: Convert capsule probabilities to a classification
 
-    out_caps = Lambda(lambda x: x[:, :, :, 0])(digitcaps)
+    out_caps = Lambda(lambda x: x[:, :, :, 0],name='select_probability')(digitcaps)
     out_caps = layers.Permute([2, 1], name='capsnet')(out_caps)  # for clasification we swap order to be instance,class
 
     # Models for training and evaluation (prediction)
@@ -80,13 +76,12 @@ def margin_loss(y_true, y_pred):
 
     acc = K.equal(K.argmax(y_true, axis=1), K.argmax(y_pred, axis=1))
 
-    # loss = tf.Print(loss,[tf.shape(y_true)],message=" margin loss y_true shape",summarize=6,first_n=1)
-    # loss = tf.Print(loss,[tf.shape(y_pred)],message=" margin loss y_pred shape",summarize=6,first_n=1)
-    # loss = tf.Print(loss,[tf.shape(L)],message=" margin loss L shape",summarize=6,first_n=1)
-    # loss = tf.Print(loss,[tf.shape(acc)],message=" margin loss acc shape",summarize=6,first_n=1)
-    # loss = tf.Print(loss,[y_true[0,:,0]],message=" margin loss y_true",summarize=6)
-    # loss = tf.Print(loss,[y_pred[0,:,0]],message=" margin loss y_pred",summarize=6)
-    # loss = tf.Print(loss,[L[0,:,0]],message=" margin loss L",summarize=6)
+    loss = tf.Print(loss,[tf.shape(y_true)],message=" margin loss y_true shape",summarize=6,first_n=1)
+    loss = tf.Print(loss,[tf.shape(y_pred)],message=" margin loss y_pred shape",summarize=6,first_n=1)
+    loss = tf.Print(loss,[tf.shape(L)],message=" margin loss L shape",summarize=6,first_n=1)
+    loss = tf.Print(loss,[tf.shape(acc)],message=" margin loss acc shape",summarize=6,first_n=1)
+    # loss = tf.Print(loss,[y_true[0,0,:],y_pred[0,0,:]],message=" margin loss y_true/y_pred",summarize=20)
+    # loss = tf.Print(loss,[L[0,0,:]],message=" margin loss L",summarize=6)
     # loss = tf.Print(loss,[loss],message=" margin loss loss",summarize=6)
     # loss = tf.Print(loss,[acc[0,0]],message=" margin loss acc",summarize=6)
     return loss
@@ -128,22 +123,36 @@ def train(model, train_gen,test_gen, args):
     print('Trained model saved to \'%s/trained_model.h5\'' % args.save_dir)
     return model
 
+def table_generator(x,y,bsz=32):
+    while True:
+        i=0
+        for i in range(0,x.shape[0],bsz):
+            yield x[i:i+bsz],y[i:i+bsz]
+
+def onehot_generator(generator,dim):
+    while True:
+        x,y = generator.__next__()
+        y_onehot = np.eye(dim)[y.astype('int32')]
+        yield (x,y_onehot)
+
+def cached_onehot_generators(data_dir="./data/",filename="images"):
+    if not ".npz" in filename:
+        filename+=".npz"
+    pathname=os.path.join(data_dir,filename)
+    try:
+        data = np.load(pathname)
+        x_test = data['x_test']
+        y_test = data['y_test']
+        x_train = data['x_train']
+        y_train = data['y_train']
+    except:
+        print("Image cache not found. Use gen_images to generate cached images.")
+        exit()
 
 
-def load_mnist():
-    # the data, shuffled and split between train and test sets
-    from keras.datasets import mnist
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
-
-    x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255.
-    x_test = x_test.reshape(-1, 28, 28, 1).astype('float32') / 255.
-    y_train = to_categorical(y_train.astype('float32'))
-    y_test = to_categorical(y_test.astype('float32'))
-    return (x_train, y_train), (x_test, y_test)
-
-
-
-
+    n_class = int(np.max(y_train)) + 1
+    return (onehot_generator(table_generator(x_train,y_train),n_class),
+                            onehot_generator(table_generator(x_test,y_test),n_class))
 
 if __name__ == "__main__":
     import os
@@ -165,39 +174,34 @@ if __name__ == "__main__":
                         help="The coefficient for the loss of decoder")
     parser.add_argument('-r', '--routings', default=3, type=int,
                         help="Number of iterations used in routing algorithm. should > 0")
-    parser.add_argument('--shift_fraction', default=0.1, type=float,
-                        help="Fraction of pixels to shift at most in each direction.")
     parser.add_argument('--debug', action='store_true',
                         help="Save weights by TensorBoard")
     parser.add_argument('--save_dir', default='./result')
-    parser.add_argument('-t', '--testing', action='store_true',
-                        help="Test the trained model on testing dataset")
-    parser.add_argument('--digit', default=5, type=int,
-                        help="Digit to manipulate")
     parser.add_argument('-w', '--weights', default=None,
                         help="The path of the saved weights. Should be specified when testing")
-    parser.add_argument('--synth', default=True,
-                        help="Use synthetic data instead of mnist")
+    parser.add_argument('--file', default='images',
+                        help="filename for cached images.. see gen_images")
+    parser.add_argument('--data', default="./data/",
+                        help="data directory for cached images")
     parser.add_argument('--count', default=1,
                         help="Number of object per image")
+    parser.add_argument('--npart', default=10,
+                        help="Number of parts per object")
     args = parser.parse_args()
     print(args)
 
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
 
-    if args.synth:
-        train_gen, test_gen = gen_images.cached_onehot_generators()
-    else:
-        # load data
-        (x_train, y_train), (x_test, y_test) = load_mnist()
+    # it might be nice to support non-file generators, but this seems to run faster
+    train_gen, test_gen = cached_onehot_generators(args.data,args.file)
 
     # define model
-    x,y=train_gen.__next__()
+    x,y=next(train_gen)
     nclass = y.shape[2]
     model = create_model(input_shape=x.shape[1:],
                          n_class=nclass,
-                         n_instance=args.count, n_part=3,
+                         n_instance=args.count, n_part=args.npart,
                          routings=args.routings)
     model.summary()
 

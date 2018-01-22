@@ -10,6 +10,7 @@ import random
 from gym.envs.classic_control.rendering import Transform,FilledPolygon,Viewer,make_circle,Compound
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 # Primitives are 1.0x1.0,
 # objects should be composed as 1.0x1.0
@@ -78,33 +79,19 @@ def generator(width_height=(28, 28), object_scale=0.5,
         img=viewer.render(return_rgb_array = True)
         yield (img, np.array(y_truth))
 
-def table_generator(x,y,bsz=32):
-    while True:
-        i=0
-        for i in range(0,x.shape[0],bsz):
-            yield x[i:i+bsz],y[i:i+bsz]
-
-def onehot_generator(generator,dim):
-    while True:
-        x,y = generator.__next__()
-        y_onehot = np.eye(dim)[y.astype('int32')]
-        yield (x,y_onehot)
-
-def cached_onehot_generators(filename="synth.npz"):
-    try:
-        data = np.load(filename)
-        x_test = data['x_test']
-        y_test = data['y_test']
-        x_train = data['x_train']
-        y_train = data['y_train']
-    except:
-        print("Image cache not found. Use gen_images to generate cached images.")
-        exit()
 
 
-    n_class = int(np.max(y_train)) + 1
-    return (onehot_generator(table_generator(x_train,y_train),n_class),
-                            onehot_generator(table_generator(x_test,y_test),n_class))
+def load_mnist(path):
+    # the data, shuffled and split between train and test sets
+    from keras.datasets import mnist
+    (x_train, y_train), (x_test, y_test) = mnist.load_data()
+
+    x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255.
+    x_test = x_test.reshape(-1, 28, 28, 1).astype('float32') / 255.
+    y_train = np.expand_dims(y_train,1)
+    y_test = np.expand_dims(y_test,1)
+    np.savez_compressed(path, x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test)
+
 
 if __name__ == "__main__":
     import argparse
@@ -118,7 +105,7 @@ if __name__ == "__main__":
                         help="Number of training images")
     parser.add_argument('--test', default=1,type=int,
                         help="Number of test images")
-    parser.add_argument('--filename', default="synth",
+    parser.add_argument('--file', default="images",
                         help="filename to save training and test data")
     parser.add_argument('--scale', default=0.5,type=float,
                         help="object scale [0.0-1.0]")
@@ -134,7 +121,20 @@ if __name__ == "__main__":
                         help="object scale range [0.0-1.0] (scale down only)")
     parser.add_argument('--rotate_range', default=0.0,type=float,
                         help="object rotate range [0.0-1.0]")
+    parser.add_argument('--save_dir', default="./data/",
+                        help="object rotate range [0.0-1.0]")
+    parser.add_argument('--mnist',  action='store_true',
+                        help="object rotate range [0.0-1.0]")
+
     args = parser.parse_args()
+
+    if not os.path.exists(args.save_dir):
+        os.makedirs(args.save_dir)
+    filename=os.path.join(args.save_dir,args.file)
+
+    if args.mnist:
+        load_mnist(filename)
+        exit()
 
     gen = generator(width_height=(args.width,args.height), object_scale=args.scale,
               width_shift_range=args.width_shift_range, height_shift_range=args.height_shift_range,
@@ -157,4 +157,4 @@ if __name__ == "__main__":
     y_test = y[args.train:, :, 0].astype('float32')
 
     print("saving images")
-    np.savez_compressed(args.filename, x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test)
+    np.savez_compressed(filename, x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test)

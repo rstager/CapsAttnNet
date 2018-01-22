@@ -48,16 +48,15 @@ git clone https://github.com/eastbayml/CAN.git can
 cd can
 ```
 
-**Step 3. Train a CAN Net on MNIST**  
+**Step 3. Train a CAN Net on synthetic data**  
 
-Training with default settings:
+First generate some data 
+```
+python gen_images.py
+```
+Then train with default settings:
 ```
 python train.py
-```
-
-More detailed usage run for help:
-```
-python capsulenet.py -h
 ```
 
 ## Results
@@ -67,6 +66,8 @@ python capsulenet.py -h
 ## Credits
 
 This code borrows heavily from the excellent implementation of the Capsule network by XifengGuo.
-(https://arxiv.org/abs/1710.09829)   
- paper by XifengGuo.
  E-mail `guoxifeng1990@163.com`
+
+And of course the paper defining the Capsule concept
+
+[Sara Sabour, Nicholas Frosst, Geoffrey E Hinton. Dynamic Routing Between Capsules. NIPS 2017](https://arxiv.org/abs/1710.09829)   
