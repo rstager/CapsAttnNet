@@ -42,11 +42,11 @@ def create_model(input_shape, n_class, n_instance, n_part, routings):
     conv1 = layers.Conv2D(filters=32, kernel_size=9, strides=1, padding='valid', activation='relu', name='conv1')(x)
 
     # Layer 2: Conv2D layer with `squash` activation, then reshape to [None, num_capsule, dim_capsule]
-    primarycaps = PrimaryCap(conv1, dim_capsule=5, n_channels=32, kernel_size=9, strides=2, padding='valid')
+    primarycaps = PrimaryCap(conv1, dim_capsule_attr=2, n_channels=32, kernel_size=9, strides=2, padding='valid')
 
 
     # Layer 3: Capsule layer. Attention algorithm works here.
-    digitcaps = CAN(num_capsule=n_class, dim_capsule=16, routings=routings, num_instance=n_instance, num_part=n_part,
+    digitcaps = CAN(num_capsule=n_class, dim_capsule_attr=10, routings=routings, num_instance=n_instance, num_part=n_part,
                     name='digitcaps')(primarycaps)
 
 

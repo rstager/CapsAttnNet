@@ -29,21 +29,21 @@ class CAN(layers.Layer):
     [None, num_capsule, dim_capsule]. For Dense Layer, input_dim_capsule = dim_capsule = 1.
 
     :param num_capsule: number of capsules types in this layer
-    :param dim_capsule: dimension of the output vectors of the capsules (include geometric pose)
+    :param dim_capsule_attr: dimension of the output vectors of the capsules (not including geometric pose)
     :param num_instance: number of instances of each capsules type
     :param num_part: number of lower level parts that can compose a capsules
     :param routings: number of iterations for the routing algorithm
     """
 
-    def __init__(self, num_capsule, dim_capsule, num_instance=5,num_part=7, routings=3,
+    def __init__(self, num_capsule, dim_capsule_attr, num_instance=5,num_part=7, routings=3,
                  kernel_initializer='glorot_uniform',
                  **kwargs):
         super(CAN, self).__init__(**kwargs)
         self.num_capsule = num_capsule
         self.num_instance = num_instance
         self.num_part = num_part
-        self.dim_capsule = dim_capsule
-        self.dim_attr = dim_capsule-dim_geom-1
+        self.dim_capsule = dim_capsule_attr+dim_geom+1
+        self.dim_attr = dim_capsule_attr
         self.routings = routings
         self.kernel_initializer = initializers.get(kernel_initializer)
 
@@ -234,11 +234,11 @@ class AddLocationLayer(layers.Layer):
 
 
 
-def PrimaryCap(inputs, dim_capsule, n_channels, kernel_size, strides, padding):
+def PrimaryCap(inputs, dim_capsule_attr, n_channels, kernel_size, strides, padding):
     """
     Apply Conv2D `n_channels` times and concatenate all capsules
     :param inputs: 4D tensor, shape=[None, width, height, channels]
-    :param dim_capsule: the dim of the output vector of capsule
+    :param dim_capsule: the dim of the output vector of capsule (not including geometric pose)
     :param n_channels: the number of types of capsules
     :return: output tensor, shape=[None, num_capsule, dim_capsule]
      dim_capsule = [probability, row [-1,1], col[-1,1], attributes]
@@ -246,13 +246,13 @@ def PrimaryCap(inputs, dim_capsule, n_channels, kernel_size, strides, padding):
 
     # The pose will contain a probability, a geometric pose data (i.e. location) and attributes.
 
-    dim_attr=dim_capsule-dim_geom-1
+    dim_capsule=dim_capsule_attr+dim_geom+1
 
-    output = layers.Conv2D(filters=dim_attr * n_channels, kernel_size=kernel_size, strides=strides, padding=padding,
+    output = layers.Conv2D(filters=dim_capsule_attr * n_channels, kernel_size=kernel_size, strides=strides, padding=padding,
                            name='primarycap_conv2d')(inputs)
     _ , rows, cols, channels = output.shape
 
-    attroutputs = layers.Reshape(target_shape=[-1,int(rows),int(cols), n_channels,dim_attr], name='primarycap_attributes')(output)
+    attroutputs = layers.Reshape(target_shape=[-1,int(rows),int(cols), n_channels,dim_capsule_attr], name='primarycap_attributes')(output)
 
 
     probability=layers.Lambda(squash_scale, name='primarycap_probability')(attroutputs)
