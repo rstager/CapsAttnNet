@@ -4,7 +4,7 @@ import tensorflow as tf
 import numpy as np
 
 
-dim_geom=2 # Number of dimensions used for the geometric pose
+dim_geom=6 # Number of dimensions used for the geometric pose
 
 def squash_scale(vectors, axis=-1):
     """
@@ -114,7 +114,7 @@ class CAN(layers.Layer):
         probability = tf.reduce_mean(inputs_hat[:,:,:,0:1],axis=2)
 
         # find the mean weighted geometric pose
-        sum_weighted_geoms = K.batch_dot(c,inputs_hat[:,:,:,1:dim_geom], [2, 2])
+        sum_weighted_geoms = K.batch_dot(c,inputs_hat[:,:,:,1:dim_geom+1], [2, 2])
         one_over_weight_sums = tf.tile(tf.expand_dims(tf.reciprocal(K.sum(c,axis=-1)),-1),[1,1,dim_geom])
         mean_geom =  one_over_weight_sums*sum_weighted_geoms
 
@@ -194,71 +194,60 @@ class CAN(layers.Layer):
     def compute_output_shape(self, input_shape):
         return tuple([None, self.num_capsule, self.num_instance, self.dim_capsule])
 
-class AddLocationLayer(layers.Layer):
-    """
-    Generate image coordinate information.
-
-
-    :param num_capsule: number of capsules types in this layer
-    :param dim_capsule: dimension of the output vectors of the capsules (include geometric pose)
-    :param num_instance: number of instances of each capsules type
-    :param num_part: number of lower level parts that can compose a capsules
-    :param routings: number of iterations for the routing algorithm
-    """
-    def __init__(self, **kwargs):
-        super(AddLocationLayer, self).__init__(**kwargs)
-    def build(self, input_shape):
-        self.built = True
-
-    def call(self, inputs):
-        # Now create the coordinate columns - the is the dim_geom
-        bsz=tf.shape(inputs)[0]
-        _,d1,rows,cols,channels,attrs = inputs.shape
-        rows = int(rows)
-        cols = int(cols)
-        xcoord, ycoord = tf.meshgrid(tf.linspace(-1.0, 1.0, rows, name="row_linspace"),
-                                     tf.linspace(-1.0, 1.0, cols, name="col_linspace"),
-                                     name='primarycap_grid')
-        xcoord = tf.reshape(xcoord, [1,1, rows,cols,1, 1])#, name='primarycap_xgrid')
-        ycoord = tf.reshape(ycoord, [1,1, rows,cols,1, 1])#, name='primarycap_ygrid')
-
-        xcoordtiled = tf.tile(xcoord, [bsz,d1,1,1,channels, 1])#, name='primarycap_xgrid_tiled')
-        ycoordtiled = tf.tile(ycoord, [bsz,d1,1,1,channels, 1])#, name='primarycap_ygrid_tiled')
-
-        # then add the location columns to the capsule outputs
-        outputs = layers.concatenate([xcoordtiled, ycoordtiled], 5, name='row_col_concated')
-        return outputs
-
-    def compute_output_shape(self, input_shape):
-        return input_shape[:-1]+(2,)
-
-
-
-def PrimaryCap(inputs, dim_capsule_attr, n_channels, kernel_size, strides, padding):
+def PrimaryCap(inputs,num_capsule, dim_capsule_attr, kernel_size, strides, padding):
     """
     Apply Conv2D `n_channels` times and concatenate all capsules
     :param inputs: 4D tensor, shape=[None, width, height, channels]
     :param dim_capsule: the dim of the output vector of capsule (not including geometric pose)
     :param n_channels: the number of types of capsules
-    :return: output tensor, shape=[None, num_capsule, dim_capsule]
-     dim_capsule = [probability, row [-1,1], col[-1,1], attributes]
+    :return: output.shape=[None, num_capsule, num_instance, dim_capsule]
     """
-
     # The pose will contain a probability, a geometric pose data (i.e. location) and attributes.
 
     dim_capsule=dim_capsule_attr+dim_geom+1
 
-    output = layers.Conv2D(filters=dim_capsule_attr * n_channels, kernel_size=kernel_size, strides=strides, padding=padding,
+    def build_geom_pose(x):
+        '''
+        build a PrimaryCap output from the Conv2D layer
+        :param x: attributes from input Conv2D
+        :return:
+        '''
+        _,rows,cols,num_capsule,dim_attr = x.shape
+        dim_capsule=dim_attr+dim_geom+1
+        # create the probability part
+        s_squared_norm = K.sum(K.square(x), -1, keepdims=True)
+        probability = s_squared_norm / (1 + s_squared_norm) / K.sqrt(s_squared_norm + K.epsilon())
+
+        # create the xy location part
+        bsz=tf.shape(x)[0]
+
+        xcoord, ycoord = tf.meshgrid(tf.linspace(-1.0, 1.0, rows),
+                                     tf.linspace(-1.0, 1.0, cols))
+        xcoord = tf.reshape(xcoord, [1, rows,cols,1, 1])
+        ycoord = tf.reshape(ycoord, [1, rows,cols,1, 1])
+
+        xcoordtiled = tf.tile(xcoord, [bsz,1,1,num_capsule, 1])
+        ycoordtiled = tf.tile(ycoord, [bsz,1,1,num_capsule, 1])
+
+        # create the angles + scale part
+        # [[cos(a)*scalex,-sin(a)*scaley],[sin(a)*scalex,cos(a)*scaley]]
+        a1=tf.ones_like(probability)
+        angles=tf.tile(a1,[1,1,1,1,4])
+
+        # now assemble the capsule output
+        o1=tf.concat([probability,xcoordtiled, ycoordtiled,angles,x],axis=-1)
+        o2=tf.reshape(o1,[bsz,rows*cols,num_capsule,dim_capsule],name="primary_cap_build_pose_output_reshaping")
+        out=tf.transpose(o2,[0,2,1,3])
+        #out=tf.Print(out,[out[0,0,0,:]],message="primary cap output",summarize=100)
+        return out
+
+
+    output = layers.Conv2D(filters=num_capsule*dim_capsule_attr, kernel_size=kernel_size, strides=strides, padding=padding,
                            name='primarycap_conv2d')(inputs)
     _ , rows, cols, channels = output.shape
 
-    attroutputs = layers.Reshape(target_shape=[-1,int(rows),int(cols), n_channels,dim_capsule_attr], name='primarycap_attributes')(output)
+    attroutputs = layers.Reshape(target_shape=[int(rows),int(cols),num_capsule,dim_capsule_attr], name='primarycap_attributes')(output)
 
+    outputs=layers.Lambda(build_geom_pose, name='primarycap')(attroutputs)
 
-    probability=layers.Lambda(squash_scale, name='primarycap_probability')(attroutputs)
-
-    locs=AddLocationLayer(name='primarycap_add_loc')(attroutputs)
-    outputs= layers.concatenate([probability,locs,attroutputs],5)
-    outputs = layers.Reshape(target_shape=[int(rows)*int(cols),n_channels,dim_capsule])(outputs)
-    outputs = layers.Permute([2,1,3],name='primarycap_output')(outputs)
     return outputs
