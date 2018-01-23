@@ -88,8 +88,8 @@ def load_mnist(path):
 
     x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255.
     x_test = x_test.reshape(-1, 28, 28, 1).astype('float32') / 255.
-    y_train = np.expand_dims(y_train,1)
-    y_test = np.expand_dims(y_test,1)
+    y_train = np.hstack([np.expand_dims(y_train,1),np.zeros([y_train.shape[0],4])])
+    y_test = np.hstack([np.expand_dims(y_test,1),np.zeros([y_test.shape[0],4])])
     np.savez_compressed(path, x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test)
 
 
@@ -103,7 +103,7 @@ if __name__ == "__main__":
                         help="Number of object per image")
     parser.add_argument('--train', default=10000,type=int,
                         help="Number of training images")
-    parser.add_argument('--test', default=1,type=int,
+    parser.add_argument('--test', default=10000,type=int,
                         help="Number of test images")
     parser.add_argument('--file', default="images",
                         help="filename to save training and test data")
@@ -151,10 +151,10 @@ if __name__ == "__main__":
     n_class = int(np.max(y[:, :, 0])) + 1
 
     x_train = np.array(x[:args.train]).astype('float32') / 255
-    y_train = y[:args.train, :, 0].astype('float32')
+    y_train = y[:args.train].astype('float32')
 
     x_test = np.array(x[args.train:]).astype('float32') / 255
-    y_test = y[args.train:, :, 0].astype('float32')
+    y_test = y[args.train:].astype('float32')
 
     print("saving images")
     np.savez_compressed(filename, x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test)

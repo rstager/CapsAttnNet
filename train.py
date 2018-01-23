@@ -13,6 +13,7 @@ Result:
 
 import numpy as np
 
+import canlayer
 import gen_images
 from keras.layers import Lambda
 
@@ -55,8 +56,11 @@ def create_model(input_shape, n_class, n_instance, n_part, routings):
     out_caps = Lambda(lambda x: x[:, :, :, 0],name='select_probability')(digitcaps)
     out_caps = layers.Permute([2, 1], name='capsnet')(out_caps)  # for clasification we swap order to be instance,class
 
+    # Capture the pose
+    out_pose = Lambda(lambda x: x[:, :, :, 1:1+canlayer.dim_geom],name='select_pose')(digitcaps)
+
     # Models for training and evaluation (prediction)
-    model = models.Model([x], [out_caps])
+    model = models.Model([x], [out_caps,out_pose])
 
     return model  #
 
@@ -86,6 +90,21 @@ def margin_loss(y_true, y_pred):
     # loss = tf.Print(loss,[acc[0,0]],message=" margin loss acc",summarize=6)
     return loss
 
+def pose_loss(y_true, y_pred):
+    """.
+    :param y_true: [None, n_classes, n_instance,pose]
+    :param y_pred: [None, n_classes, n_instance,pose]
+    :return: a scalar loss value.
+    """
+    loss = K.sum( K.square(y_true-y_pred),-1)
+
+    loss = tf.Print(loss,[tf.shape(y_true)],message=" pose loss y_true shape",summarize=6,first_n=1)
+    loss = tf.Print(loss,[tf.shape(y_pred)],message=" pose loss y_pred shape",summarize=6,first_n=1)
+    # loss = tf.Print(loss,[y_true[0,0,0]],message=" pose true y_true",summarize=20)
+    # loss = tf.Print(loss,[y_pred[0,0,0]],message=" pose loss y_pred",summarize=20)
+    # loss = tf.Print(loss,[loss],message=" margin loss loss",summarize=6)
+
+    return loss
 
 def train(model, train_gen,test_gen, args):
     """
@@ -106,8 +125,8 @@ def train(model, train_gen,test_gen, args):
 
     # compile the model
     model.compile(optimizer=optimizers.Adam(lr=args.lr),
-                  loss=[margin_loss],
-                  loss_weights=[1.],
+                  loss=[margin_loss,pose_loss],
+                  loss_weights=[1.,1],
                   metrics={'capsnet': 'accuracy'})
 
     # Training without data augmentation.
@@ -131,9 +150,14 @@ def table_generator(x,y,bsz=32):
 
 def onehot_generator(generator,dim):
     while True:
-        x,y = generator.__next__()
-        y_onehot = np.eye(dim)[y.astype('int32')]
-        yield (x,y_onehot)
+        x,y = next(generator)
+        y_onehot = np.eye(dim)[y[:,:,0].astype('int32')]
+        y_pose = np.zeros([y.shape[0],dim,1,canlayer.dim_geom])
+        for row in range(y.shape[0]):
+            for inst in range(y.shape[1]):
+                cls=int(y[row,inst,0])
+                y_pose[row, cls, inst,0:2]=y[row,inst,1:3] # x&y
+        yield (x,[y_onehot,y_pose])
 
 def cached_onehot_generators(data_dir="./data/",filename="images"):
     if not ".npz" in filename:
@@ -198,7 +222,7 @@ if __name__ == "__main__":
 
     # define model
     x,y=next(train_gen)
-    nclass = y.shape[2]
+    nclass = y[0].shape[2]
     model = create_model(input_shape=x.shape[1:],
                          n_class=nclass,
                          n_instance=args.count, n_part=args.npart,
