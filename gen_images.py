@@ -88,8 +88,10 @@ def load_mnist(path):
 
     x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255.
     x_test = x_test.reshape(-1, 28, 28, 1).astype('float32') / 255.
-    y_train = np.hstack([np.expand_dims(y_train,1),np.zeros([y_train.shape[0],4])])
-    y_test = np.hstack([np.expand_dims(y_test,1),np.zeros([y_test.shape[0],4])])
+    train_rows=y_train.shape[0]
+    y_train=np.concatenate([np.reshape(y_train, [train_rows, 1, 1]),np.zeros([train_rows,1,4])],axis=-1)
+    test_rows=y_test.shape[0]
+    y_test=np.concatenate([np.reshape(y_test, [test_rows, 1, 1]),np.zeros([test_rows,1,4])],axis=-1)
     np.savez_compressed(path, x_train=x_train, y_train=y_train, x_test=x_test, y_test=y_test)
 
 
