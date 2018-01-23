@@ -55,13 +55,13 @@ class CAN(layers.Layer):
         self.input_dim_attr = self.input_dim_capsule - dim_geom - 1
 
         # Transform matrix for geometric pose
-        self.W1 = self.add_weight(shape=[self.num_capsule, self.num_part,
+        self.W1 = self.add_weight(shape=[self.input_num_capsule,self.num_capsule, self.num_part,
                                          dim_geom+1, dim_geom],
                                  initializer=self.kernel_initializer,
                                  name='W1')
 
         # Tranform matrix for attributes
-        self.W2 = self.add_weight(shape=[self.num_capsule,self.num_part,
+        self.W2 = self.add_weight(shape=[self.input_num_capsule,self.num_capsule,self.num_part,
                                          self.input_dim_attr,self.dim_attr],
                                  initializer=self.kernel_initializer,
                                  name='W2')
@@ -74,20 +74,21 @@ class CAN(layers.Layer):
         :param x: set of poses to transform
         """
         # inputs.shape=[ input_num_capsule, input_num_instance, input_dim_capsule]
-        # output.shape=[num_instance*num_capsule,num_parts*input_num_capsule*input_num_instance,dim_capsule]
-        # xt.shape = [ num_instance, input_num_capsule, input_num_instance, num_capsule, num_part, input_dim_capsule]
-        # xpart.shape = [ num_instance, input_num_capsule, input_num_instance, num_capsule, num_part, input_dim_capsule]
+        # output.shape=[num_instance*num_capsule, num_parts*input_num_capsule*input_num_instance,dim_capsule]
+        # xt.shape = [ input_num_capsule, num_instance, input_num_instance, input_dim_capsule]
+        # xpart.shape = [ num_instance, input_num_instance, num_capsule, num_part, dim_x,input_num_capsule]
+        # gpose.shape = [ input_num_capsule, num_instance, input_num_instance, dim_geom+1]
+        xt = K.tile(K.expand_dims(x,1),[1,self.num_instance,1,1])
 
-        xt = K.tile(K.expand_dims(x,0),[self.num_instance,1,1,1])
-
-        ppart = K.reshape( xt[:,:,:,:1],[self.num_instance,self.input_num_capsule,self.input_num_instance,1,1,1])
-        ppart = K.tile(ppart,[1,1,1,self.num_capsule,self.num_part,1])
+        tmp = K.reshape( xt[:,:,:,:1],[self.input_num_capsule,self.num_instance,self.input_num_instance,1,1,1])
+        tmp = K.tile(tmp,[1,1,1,self.num_capsule,self.num_part,1])
+        ppart=K.permute_dimensions(tmp,[1,2,3,4,5,0])
 
         gpose = K.concatenate([xt[:,:,:,1:dim_geom+1],K.ones_like(xt[:,:,:,:1])]) # add 1 col to allow x-y translate
-        gpart = K.dot(gpose, self.W1)
-        apart = K.dot(xt[:,:,:,dim_geom+1:], self.W2)
-        whole=K.concatenate([ppart,gpart,apart])
-        output=K.permute_dimensions(whole,[0,3,4,1,2,5])
+        gpart = K.concatenate([K.expand_dims(K.dot(gpose[i],self.W1[i]),-1) for i in range(self.input_num_capsule)])
+        apart = K.concatenate([K.expand_dims(K.dot(xt[i,:,:,dim_geom+1:],self.W2[i]),-1) for i in range(self.input_num_capsule)])
+        whole=K.concatenate([ppart,gpart,apart],4)
+        output=K.permute_dimensions(whole,[0,2,3,5,1,4])
         output=K.reshape(output,[self.num_instance*self.num_capsule,
                                  self.num_part*self.input_num_capsule*self.input_num_instance,self.dim_capsule])
         # output = tf.Print(output, [tf.shape(x)], message='x', summarize=16)

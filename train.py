@@ -10,6 +10,7 @@ Usage:
 Result:
 
 """
+from random import randint
 
 import numpy as np
 
@@ -80,14 +81,15 @@ def margin_loss(y_true, y_pred):
 
     acc = K.equal(K.argmax(y_true, axis=1), K.argmax(y_pred, axis=1))
 
-    loss = tf.Print(loss,[tf.shape(y_true)],message=" margin loss y_true shape",summarize=6,first_n=1)
-    loss = tf.Print(loss,[tf.shape(y_pred)],message=" margin loss y_pred shape",summarize=6,first_n=1)
-    loss = tf.Print(loss,[tf.shape(L)],message=" margin loss L shape",summarize=6,first_n=1)
-    loss = tf.Print(loss,[tf.shape(acc)],message=" margin loss acc shape",summarize=6,first_n=1)
+    # loss = tf.Print(loss,[tf.shape(y_true)],message=" margin loss y_true shape",summarize=6,first_n=1)
+    # loss = tf.Print(loss,[tf.shape(y_pred)],message=" margin loss y_pred shape",summarize=6,first_n=1)
+    # loss = tf.Print(loss,[tf.shape(L)],message=" margin loss L shape",summarize=6,first_n=1)
+    # loss = tf.Print(loss,[tf.shape(acc)],message=" margin loss acc shape",summarize=6,first_n=1)
     # loss = tf.Print(loss,[y_true[0,0,:],y_pred[0,0,:]],message=" margin loss y_true/y_pred",summarize=20)
     # loss = tf.Print(loss,[L[0,0,:]],message=" margin loss L",summarize=6)
     # loss = tf.Print(loss,[loss],message=" margin loss loss",summarize=6)
     # loss = tf.Print(loss,[acc[0,0]],message=" margin loss acc",summarize=6)
+
     return loss
 
 def pose_loss(y_true, y_pred):
@@ -98,11 +100,13 @@ def pose_loss(y_true, y_pred):
     """
     loss = K.sum( K.square(y_true-y_pred),-1)
 
-    loss = tf.Print(loss,[tf.shape(y_true)],message=" pose loss y_true shape",summarize=6,first_n=1)
-    loss = tf.Print(loss,[tf.shape(y_pred)],message=" pose loss y_pred shape",summarize=6,first_n=1)
-    # loss = tf.Print(loss,[y_true[0,0,0]],message=" pose true y_true",summarize=20)
-    # loss = tf.Print(loss,[y_pred[0,0,0]],message=" pose loss y_pred",summarize=20)
-    # loss = tf.Print(loss,[loss],message=" margin loss loss",summarize=6)
+    # loss = tf.Print(loss,[tf.shape(y_true)],message=" pose loss y_true shape",summarize=6,first_n=1)
+    # loss = tf.Print(loss,[tf.shape(y_pred)],message=" pose loss y_pred shape",summarize=6,first_n=1)
+    # idx=8
+    # loss = tf.Print(loss,[loss[idx,0]],message=" pose loss loss",summarize=6)
+    # loss = tf.Print(loss,[y_true[idx,0,0]],message=" pose true y_true",summarize=20)
+    # loss = tf.Print(loss,[y_pred[idx,0,0]],message=" pose loss y_pred",summarize=20)
+    # loss = tf.Print(loss,[loss[idx,0]],message=" pose loss loss",summarize=6)
 
     return loss
 
