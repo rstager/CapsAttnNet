@@ -1,3 +1,5 @@
+from keras.regularizers import Regularizer
+
 from keras import layers, initializers
 import keras.backend as K
 import tensorflow as tf
@@ -5,7 +7,7 @@ import numpy as np
 
 
 dim_geom=6 # Number of dimensions used for the geometric pose
-affine_filters=2 # filters to drive affine transformation
+affine_filters=2 # filters to drive affine_factor transformation
 def squash_scale(vectors, axis=-1):
     """
     The non-linear activation used in Capsule. It drives the length of a large vector to near 1 and small vector to 0
@@ -17,6 +19,37 @@ def squash_scale(vectors, axis=-1):
     scale = s_squared_norm / (1 + s_squared_norm) / K.sqrt(s_squared_norm + K.epsilon())
     return scale
 
+class W1Regularizer(Regularizer):
+    """Regularizer drives transforms to affine_factor form and centered.
+
+    """
+
+    def __init__(self, affine=1e-2, centered=1e-2):
+        self.affine_factor = K.cast_to_floatx(affine)
+        self.centered_factor = K.cast_to_floatx(centered)
+
+    def __call__(self, x):
+        # W1.shape=[input_num_capsule,num_capsule,num_part,dim_geom+1, dim_geom]
+        # W1 is affine_factor iff in the lower two dimensions W1 is of the form
+        # [x,x,0,0,0,0]
+        # [x,x,0,0,0,0]
+        # [0,0,x,x,0,0]
+        # [0,0,x,x,0,0]
+        # [0,0,0,0,x,x]
+        # [0,0,0,0,x,x]
+        # [0,0,0,0,x,x]
+        regularization = 0.
+        regularization += K.sum(self.affine_factor * K.square(x[:, :, :, 2:6, 0:2])) #upper right block of zeros
+        regularization += K.sum(self.affine_factor * K.square(x[:, :, :, 0:2, 2:4]))
+        regularization += K.sum(self.affine_factor * K.square(x[:, :, :, 4:6, 2:4]))
+        regularization += K.sum(self.affine_factor * K.square(x[:, :, :, 0:4, 4:7])) #lower left block of zeros
+
+        #regularization += K.sum(self.centered_factor * K.square(K.sum(x[:,:,:,6,4:6],axis=2))) # sum of offsets per part
+        return regularization
+
+    def get_config(self):
+        return {'affine_factor': float(self.affine_factor),
+                'centered_factor': float(self.centered_factor)}
 
 class CAN(layers.Layer):
     """
@@ -58,6 +91,7 @@ class CAN(layers.Layer):
         self.W1 = self.add_weight(shape=[self.input_num_capsule,self.num_capsule, self.num_part,
                                          dim_geom+1, dim_geom],
                                  initializer=self.kernel_initializer,
+                                 regularizer=W1Regularizer(),
                                  name='W1')
 
         # Tranform matrix for attributes
@@ -194,6 +228,13 @@ class CAN(layers.Layer):
     def compute_output_shape(self, input_shape):
         return tuple([None, self.num_capsule, self.num_instance, self.dim_capsule])
 
+    def get_config(self):
+        return {'num_capsule':self.num_capsule,
+                'dim_capsule_attr':self.dim_attr,
+                'num_instance':self.num_instance,
+                'num_part':self.num_part,
+                'routings':self.routings}
+
 def PrimaryCap(inputs,num_capsule, dim_capsule_attr, kernel_size, strides, padding):
     """
     Apply Conv2D `n_channels` times and concatenate all capsules
@@ -212,6 +253,8 @@ def PrimaryCap(inputs,num_capsule, dim_capsule_attr, kernel_size, strides, paddi
         :param x: attributes from input Conv2D
         :return:
         '''
+        import tensorflow as tf
+        from canlayer import dim_geom,affine_filters
         _,rows,cols,num_capsule,dim_x = x.shape
         dim_capsule=dim_x-2+dim_geom+1
         # create the probability part
@@ -256,3 +299,11 @@ def PrimaryCap(inputs,num_capsule, dim_capsule_attr, kernel_size, strides, paddi
     outputs=layers.Lambda(build_geom_pose, name='primarycap')(attroutputs)
 
     return outputs
+    # def get_config(self):
+    #     return {
+    #         inputs,num_capsule, dim_capsule_attr, kernel_size, strides, padding
+    #         'num_capsule':self.num_capsule,
+    #             'dim_capsule_attr':self.dim_capsule_attr,
+    #             'kernel_size':self.num_instance,
+    #             'strides':self.num_part,
+    #             'padding':self.routings}
