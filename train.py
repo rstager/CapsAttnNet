@@ -22,6 +22,7 @@ from canlayer import PrimaryCap, CAN
 from keras import layers, models, optimizers
 from keras import backend as K
 import tensorflow as tf
+import os
 
 
 K.set_image_data_format('channels_last')
@@ -58,7 +59,8 @@ def create_model(input_shape, n_class, n_instance, n_part, routings):
     out_caps = layers.Permute([2, 1], name='capsnet')(out_caps)  # for clasification we swap order to be instance,class
 
     # Capture the pose
-    out_pose = Lambda(lambda x: x[:, :, :, 1:1+canlayer.dim_geom],name='select_pose')(digitcaps)
+    out_pose = Lambda(lambda x,dim_geom: x[:, :, :, 1:1+dim_geom],arguments={'dim_geom':canlayer.dim_geom},
+                      name='select_pose')(digitcaps)
 
     # Models for training and evaluation (prediction)
     model = models.Model([x], [out_caps,out_pose])
@@ -123,8 +125,8 @@ def train(model, train_gen,test_gen, args):
     log = callbacks.CSVLogger(args.save_dir + '/log.csv')
     tb = callbacks.TensorBoard(log_dir=args.save_dir + '/tensorboard-logs',
                                batch_size=args.batch_size, histogram_freq=int(args.debug))
-    checkpoint = callbacks.ModelCheckpoint(args.save_dir + '/weights-{epoch:02d}.h5', monitor='val_capsnet_acc',
-                                           save_best_only=True, save_weights_only=True, verbose=1)
+    checkpoint = callbacks.ModelCheckpoint(args.save_dir + '/trained_model.h5', monitor='val_capsnet_acc',
+                                           save_best_only=True, save_weights_only=False, verbose=1)
     lr_decay = callbacks.LearningRateScheduler(schedule=lambda epoch: args.lr * (args.lr_decay ** epoch))
 
     # compile the model
@@ -141,9 +143,6 @@ def train(model, train_gen,test_gen, args):
                         validation_steps=args.validation_steps,
                         callbacks=[log, tb, checkpoint, lr_decay])
     # End: Training with data augmentation -----------------------------------------------------------------------#
-
-    model.save_weights(args.save_dir + '/trained_model.h5')
-    print('Trained model saved to \'%s/trained_model.h5\'' % args.save_dir)
     return model
 
 def table_generator(x,y,bsz=32):
