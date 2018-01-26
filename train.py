@@ -108,10 +108,10 @@ def pose_loss(y_true, y_pred):
     # loss = tf.Print(loss,[tf.shape(y_true)],message=" pose loss y_true shape",summarize=6,first_n=1)
     # loss = tf.Print(loss,[tf.shape(y_pred)],message=" pose loss y_pred shape",summarize=6,first_n=1)
     # loss = tf.Print(loss,[loss[0,0]],message=" pose loss loss",summarize=6)
-    loss = tf.Print(loss,[loss[0,:,0]],message=" pose  loss",summarize=20)
-    loss = tf.Print(loss,[selector[0,:,0]],message=" pose  selector",summarize=20)
-    loss = tf.Print(loss,[y_true[0,:,0]],message=" pose  y_true",summarize=20)
-    loss = tf.Print(loss,[y_pred[0,:,0]],message=" pose  y_pred",summarize=20)
+    # loss = tf.Print(loss,[loss[0,:,0]],message=" pose  loss",summarize=20)
+    # loss = tf.Print(loss,[selector[0,:,0]],message=" pose  selector",summarize=20)
+    # loss = tf.Print(loss,[y_true[0,:,0]],message=" pose  y_true",summarize=20)
+    # loss = tf.Print(loss,[y_pred[0,:,0]],message=" pose  y_pred",summarize=20)
     # loss = tf.Print(loss,[loss[0,0]],message=" pose loss loss",summarize=6)
 
     return loss
@@ -136,7 +136,7 @@ def train(model, train_gen,test_gen, args):
     # compile the model
     model.compile(optimizer=optimizers.Adam(lr=args.lr),
                   loss=[margin_loss,pose_loss],
-                  loss_weights=[1.,1],
+                  loss_weights=[1.,0],
                   metrics={'capsnet': 'accuracy'})
 
     # Training without data augmentation.

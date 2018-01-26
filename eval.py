@@ -78,6 +78,7 @@ def eval(model,test_gen,args):
                 print()
                 print("true {:10} {}".format(objs[label_true][0],line1) )
                 print("pred {:10} {}".format(objs[label_pred][0],line2))
+                print("class {: 0.3f} {: 0.3f} {: 0.3f}".format(y_pred[0,0],y_pred[0,1],y_pred[0,2]))
                 #print_contributions(w1,pose_pred[label_pred,0],label_pred)
 
             idx +=1

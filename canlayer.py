@@ -93,7 +93,7 @@ class CAN(layers.Layer):
         self.W1 = self.add_weight(shape=[self.input_num_capsule,self.num_capsule, self.num_part,
                                          dim_geom+1, dim_geom],
                                  initializer=self.kernel_initializer,
-                                 regularizer=W1Regularizer(affine=0),
+                                 regularizer=W1Regularizer(affine=1e-4),
                                  name='W1')
 
         # Tranform matrix for attributes
