@@ -31,6 +31,14 @@ instead of having a separate transformation for every child capsule
 - test with larger images
 - more flexible specification of instance and part counts
 
+**Experiments TODO**
+- try kfac
+- refactor W1 into W1a & W1b
+- add centering regularizer
+- add distance penalty
+- try 3 boxes, tall, square, wide
+- try fewer filters
+- try stacks of layers
 
 ## Usage
 
