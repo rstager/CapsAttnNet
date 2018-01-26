@@ -30,6 +30,7 @@ class W1Regularizer(Regularizer):
 
     def __call__(self, x):
         # W1.shape=[input_num_capsule,num_capsule,num_part,dim_geom+1, dim_geom]
+        # pose is of the form [X,Y,cos,sin,-sin,cos] so
         # W1 is affine_factor iff in the lower two dimensions W1 is of the form
         # [x,x,0,0,0,0]
         # [x,x,0,0,0,0]
@@ -37,12 +38,13 @@ class W1Regularizer(Regularizer):
         # [0,0,x,x,0,0]
         # [0,0,0,0,x,x]
         # [0,0,0,0,x,x]
-        # [0,0,0,0,x,x]
+        # [x,x,0,0,0,0]
         regularization = 0.
         regularization += K.sum(self.affine_factor * K.square(x[:, :, :, 2:6, 0:2])) #upper right block of zeros
         regularization += K.sum(self.affine_factor * K.square(x[:, :, :, 0:2, 2:4]))
         regularization += K.sum(self.affine_factor * K.square(x[:, :, :, 4:6, 2:4]))
-        regularization += K.sum(self.affine_factor * K.square(x[:, :, :, 0:4, 4:7])) #lower left block of zeros
+        regularization += K.sum(self.affine_factor * K.square(x[:, :, :, 0:4, 4:6])) #lower left block of zeros
+        regularization += K.sum(self.affine_factor * K.square(x[:, :, :, 2:6, 6:7])) #last row
 
         #regularization += K.sum(self.centered_factor * K.square(K.sum(x[:,:,:,6,4:6],axis=2))) # sum of offsets per part
         return regularization
@@ -91,7 +93,7 @@ class CAN(layers.Layer):
         self.W1 = self.add_weight(shape=[self.input_num_capsule,self.num_capsule, self.num_part,
                                          dim_geom+1, dim_geom],
                                  initializer=self.kernel_initializer,
-                                 regularizer=W1Regularizer(),
+                                 regularizer=W1Regularizer(affine=0),
                                  name='W1')
 
         # Tranform matrix for attributes
@@ -257,9 +259,7 @@ def PrimaryCap(inputs,num_capsule, dim_capsule_attr, kernel_size, strides, paddi
         from canlayer import dim_geom,affine_filters
         _,rows,cols,num_capsule,dim_x = x.shape
         dim_capsule=dim_x-2+dim_geom+1
-        # create the probability part
-        s_squared_norm = K.sum(K.square(x), -1, keepdims=True)
-        probability = s_squared_norm / (1 + s_squared_norm) / K.sqrt(s_squared_norm + K.epsilon())
+
 
         # create the xy location part
         bsz=tf.shape(x)[0]
@@ -279,7 +279,13 @@ def PrimaryCap(inputs,num_capsule, dim_capsule_attr, kernel_size, strides, paddi
         r = r+K.epsilon()
         cosa=cosa0/r
         sina=sina0/r
+        # cosa=tf.ones_like(cosa)
+        # sina=tf.zeros_like(sina)
         affine=tf.concat([cosa,sina,-sina,cosa],axis=-1)
+
+        # create the probability part
+        s_squared_norm = K.sum(K.square(r), -1, keepdims=True)
+        probability = s_squared_norm / (1 + s_squared_norm) / K.sqrt(s_squared_norm + K.epsilon())
 
         # now assemble the capsule output
         attrs=x[...,affine_filters:]
@@ -288,7 +294,6 @@ def PrimaryCap(inputs,num_capsule, dim_capsule_attr, kernel_size, strides, paddi
         out=tf.transpose(o2,[0,2,1,3])
         #out=tf.Print(out,[out[0,0,0,:]],message="primary cap output",summarize=100)
         return out
-
 
     output = layers.Conv2D(filters=num_capsule*(dim_capsule_attr+affine_filters), kernel_size=kernel_size, strides=strides, padding=padding,
                            name='primarycap_conv2d')(inputs)
