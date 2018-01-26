@@ -18,11 +18,35 @@ from keras import backend as K
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from canlayer import CAN,PrimaryCap,dim_geom
+from itertools import product
 
 from train import cached_onehot_generators, create_model, margin_loss, pose_loss
 from gen_images import default_objects as objs
 
+def print_W1(w1):
+
+    shape=w1.shape
+    for i0,i1,i2 in product(range(shape[0]), range(shape[1]), range(shape[2])):
+        print()
+        print("icap {}, ncap {}, npart {}".format(i0,i1,i2))
+        for i3 in range(shape[3]):
+            line=""
+            for i4 in range(shape[4]):
+                line+="{: 0.3f} ".format(w1[i0,i1,i2,i3,i4])
+            print(line)
+
+def print_contributions(w1,x,label):
+    # W1.shape =[input_num_capsule, num_capsule, num_part, dim_geom + 1, dim_geom]
+    shape=w1.shape
+    for i0,i1,i2 in product(range(shape[0]), range(shape[1]), range(shape[2])):
+        print(" {: 1.3f} {: 1.3f} {: 1.3f} {: 1.3f} {: 1.3f} {: 1.3f}".format(
+            w1[i0, i1, i2, 6, 0], w1[i0, i1, i2, 6, 1],w1[i0,i1,i2,0,0],
+            w1[i0,i1,i2,0,1],w1[i0,i1,i2,1,0],w1[i0,i1,i2,1,1]))
+
 def eval(model,test_gen,args):
+    w1=model.get_layer('can_1').get_weights()[0]
+    print_W1(w1)
+
     ncol=4
     nrow=int((args.num-1)/ncol)+1
     idx=0
@@ -45,6 +69,16 @@ def eval(model,test_gen,args):
             ax.scatter(pose_pred[label_pred,0,0:1],pose_pred[label_pred,0,1:2])
 
             ax.set_title("{} {:.2f}".format(objs[label_pred][0],probability))
+
+            if True:
+                line1, line2 = "", ""
+                for p,t in zip( pose_true[label_true, 0],pose_pred[label_pred, 0]):
+                    line1 += "{: 0.3f} ".format(p)
+                    line2 += "{: 0.3f} ".format(t)
+                print()
+                print("true {:10} {}".format(objs[label_true][0],line1) )
+                print("pred {:10} {}".format(objs[label_pred][0],line2))
+                #print_contributions(w1,pose_pred[label_pred,0],label_pred)
 
             idx +=1
             if (idx == args.num):
@@ -73,8 +107,6 @@ if __name__ == "__main__":
     parser.add_argument('--model', default="trained_model.h5",
                         help="model filename")
     args = parser.parse_args()
-    print(args)
-
 
     # it might be nice to support non-file generators, but this seems to run faster
     train_gen, test_gen = cached_onehot_generators(args.data,args.file)
@@ -89,6 +121,7 @@ if __name__ == "__main__":
                        })
 
     model.summary()
+
 
     eval(model, test_gen, args=args)
 
