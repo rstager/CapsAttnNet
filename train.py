@@ -87,7 +87,9 @@ def margin_loss(y_true, y_pred):
     # loss = tf.Print(loss,[tf.shape(y_pred)],message=" margin loss y_pred shape",summarize=6,first_n=1)
     # loss = tf.Print(loss,[tf.shape(L)],message=" margin loss L shape",summarize=6,first_n=1)
     # loss = tf.Print(loss,[tf.shape(acc)],message=" margin loss acc shape",summarize=6,first_n=1)
-    # loss = tf.Print(loss,[y_true[0,0,:],y_pred[0,0,:]],message=" margin loss y_true/y_pred",summarize=20)
+    # loss = tf.Print(loss, [ loss], message=" margin loss",summarize=20)
+    # loss = tf.Print(loss,[y_true[0,0,:]],message=" margin loss y_true",summarize=20)
+    # loss = tf.Print(loss,[y_pred[0,0,:]],message=" margin loss y_pred",summarize=20)
     # loss = tf.Print(loss,[L[0,0,:]],message=" margin loss L",summarize=6)
     # loss = tf.Print(loss,[loss],message=" margin loss loss",summarize=6)
     # loss = tf.Print(loss,[acc[0,0]],message=" margin loss acc",summarize=6)
@@ -100,15 +102,17 @@ def pose_loss(y_true, y_pred):
     :param y_pred: [None, n_classes, n_instance,pose]
     :return: a scalar loss value.
     """
-    loss = K.sum( K.square(y_true-y_pred),-1)
-
+    selector=y_true[:,:,:,2]
+    loss = K.sqrt(K.sum( K.square(y_true[:,:,:,0:2]-y_pred[:,:,:,0:2]),-1))
+    loss = selector*loss
     # loss = tf.Print(loss,[tf.shape(y_true)],message=" pose loss y_true shape",summarize=6,first_n=1)
     # loss = tf.Print(loss,[tf.shape(y_pred)],message=" pose loss y_pred shape",summarize=6,first_n=1)
-    # idx=8
-    # loss = tf.Print(loss,[loss[idx,0]],message=" pose loss loss",summarize=6)
-    # loss = tf.Print(loss,[y_true[idx,0,0]],message=" pose true y_true",summarize=20)
-    # loss = tf.Print(loss,[y_pred[idx,0,0]],message=" pose loss y_pred",summarize=20)
-    # loss = tf.Print(loss,[loss[idx,0]],message=" pose loss loss",summarize=6)
+    # loss = tf.Print(loss,[loss[0,0]],message=" pose loss loss",summarize=6)
+    loss = tf.Print(loss,[loss[0,:,0]],message=" pose  loss",summarize=20)
+    loss = tf.Print(loss,[selector[0,:,0]],message=" pose  selector",summarize=20)
+    loss = tf.Print(loss,[y_true[0,:,0]],message=" pose  y_true",summarize=20)
+    loss = tf.Print(loss,[y_pred[0,:,0]],message=" pose  y_pred",summarize=20)
+    # loss = tf.Print(loss,[loss[0,0]],message=" pose loss loss",summarize=6)
 
     return loss
 
@@ -160,6 +164,8 @@ def onehot_generator(generator,dim):
             for inst in range(y.shape[1]):
                 cls=int(y[row,inst,0])
                 y_pose[row, cls, inst,0:2]=y[row,inst,1:3] # x&y
+                y_pose[row, cls, inst, 2]=1
+                y_pose[row, cls, inst, 4]=1
         yield (x,[y_onehot,y_pose])
 
 def cached_onehot_generators(data_dir="./data/",filename="images"):
@@ -215,7 +221,6 @@ if __name__ == "__main__":
     parser.add_argument('--npart', default=10,
                         help="Number of parts per object")
     args = parser.parse_args()
-    print(args)
 
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
